@@ -3,7 +3,11 @@
 Last updated: 2026-08-03 morning.
 
 **This document is written to be self-contained.** A fresh session with no prior context should be
-able to pick up the project from here. Read this, then `docs/00-overview.md`.
+able to pick up the project from here.
+
+Reading order: **this file** (state) → **`docs/BACKGROUND.md`** (why the project is shaped this way,
+including alternatives already rejected) → **`docs/00-overview.md`** (the experimental plan).
+A ready-to-paste startup prompt is in **`START_PROMPT.md`**.
 
 Repo: https://github.com/PraneethO/flatjepa (public, owner `PraneethO`).
 
@@ -356,15 +360,17 @@ cd ~/Desktop/flatjepa && scripts/gen_launch.sh start
 
 ### Starting the assistant
 
-Run `claude` from `~/Desktop/flatjepa` so it picks up the repo as its working directory, then open
-with something like:
+Run `claude` from `~/Desktop/flatjepa` so it picks up the repo as its working directory, then paste
+the prompt from **`START_PROMPT.md`** (which also has shorter variants for checking status, resuming
+mid-feature, and recovering from a reboot).
 
-> Read PROGRESS.md and docs/00-overview.md, then confirm the current state back to me before
-> changing anything. Next task is F4 (docs/F4-dataset.md). Do not add any AI attribution to code or
-> commits.
+Note the prompt restates the no-attribution rule explicitly. A fresh session does not inherit it,
+and violating it in a commit trailer is silent.
 
-The last sentence matters — a fresh session does not inherit that instruction, and §0 of this
-document is the only place it is recorded.
+**Closing your laptop lid** (the machine you SSH *from*) drops the connection and SIGHUPs anything
+in the SSH session's foreground, including `claude`. Work inside tmux survives, and data generation
+survives regardless because `gen_launch.sh` detaches with `setsid nohup`. The desktop itself has no
+lid and cannot suspend — `sleep.target` and `suspend.target` are masked. Only a reboot loses work.
 
 ### What a fresh session most needs to know
 
