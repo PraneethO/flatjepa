@@ -172,17 +172,36 @@ parsed from the stem, and uses per-environment *hashing* rather than seeded shuf
 appending new environments to a growing corpus cannot silently move a previously-tested environment
 into training. This matters because generation is ongoing.
 
-### 5.5 E1 risks being tautological — **UNRESOLVED, must fix before E1 means anything**
-See `docs/F4-dataset.md` §2. If the model input is `sol_x = (p,v,a)` and the probe target is
-`(p,v,a)`, the network is handed its own answer and R² ≈ 1.0 proves nothing.
+### 5.5 E1 risks being tautological — mitigation redesigned, not yet implemented
+See `docs/F7-measurement-suite.md` §1b and `docs/F4-dataset.md` §2.
 
-Planned mitigation, not yet implemented:
-1. Feed a **partial** observation (e.g. position only) as the headline configuration, so recovering
-   acceleration/jerk is genuinely inferential.
-2. Probe for quantities not in the input at all: quadrotor attitude, cable direction.
-3. Always report the **random-init encoder** control to quantify what is trivially present.
+The naive failure: if the input is `sol_x = (p,v,a)` and the probe target is `(p,v,a)`, R² ≈ 1.0
+proves nothing.
 
-Do all three. This is the single most likely way this project produces a meaningless positive.
+**The subtler failure, which the original mitigation walked into:** with a *history window* as
+input, every time-derivative is a **linear functional of that window** — velocity is a finite
+difference, acceleration a second difference, jerk a third. So feeding position only (the original
+proposed fix) leaves `v`, `a`, `j` linearly recoverable from the raw window. The "raw input window"
+control would also score ~1.0, and the result would still be vacuous while *appearing* controlled
+for.
+
+**Current design.** Probe for the **nonlinear** consequences of the flat map, which are its actual
+content:
+
+| Target | Linear in window? | Role |
+|---|---|---|
+| `p`, `v`, `a`, `j` | Yes (finite differences) | Sanity check only; expect ~1.0 and label it |
+| tension `‖a+g·e₃‖` | No (norm) | Eligible |
+| cable direction | No (normalization) | Eligible |
+| quad attitude `R_flat` | No (cross products, SO(3)) | **Preferred headline** |
+| `p_quad` | No (nonlinear via `b₃`) | Eligible |
+
+Enforced by a **linear-decodability audit** (F7 §1b): every candidate target is first probed from
+the raw input window, and anything the raw window already solves (R² > 0.9) is disqualified as a
+headline target automatically. Not yet implemented — build it as part of F7, before any E1 number
+is reported.
+
+Remember §5.2 when probing attitude: use the **flat-map** attitude, not the CSV columns.
 
 ## 6. Open decisions (need the author)
 

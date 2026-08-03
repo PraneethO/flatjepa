@@ -24,6 +24,56 @@ If the trained encoder does not beat the random-init encoder, **there is no resu
 honest report says so. This is the single most likely way this project produces a spurious positive,
 and it is cheap to guard against.
 
+## 1b. The linear-decodability audit — a hard gate on E1 targets
+
+**This is the safeguard against the project's most likely failure mode: a result that looks strong
+and means nothing.**
+
+### The trap
+
+With a *history window* as model input, every time-derivative of the state is a **linear functional
+of that window**. Velocity is a finite difference of positions; acceleration is a second difference;
+jerk a third. So a linear probe fit directly on the raw input window recovers `v`, `a`, and `j` to
+near-machine precision, with no model involved at all.
+
+This invalidates the mitigation originally proposed in `F4-dataset.md` §2 ("feed position only, probe
+for the derivatives"). Restricting the observation does **not** help: the derivatives remain linear
+in the window. A result reported that way would be vacuous while appearing to have been controlled
+for.
+
+### The gate
+
+Before any quantity may serve as a **headline** E1 target, it must pass this audit:
+
+1. Fit a ridge probe from the **raw normalized input window** to the candidate target.
+2. Record R²_raw on the test split.
+3. If R²_raw exceeds a threshold (default 0.9), the target is **disqualified as a headline target**.
+   It may still be reported as a sanity check, explicitly labeled as linearly trivial.
+
+The audit runs automatically as part of the suite and its table is published alongside results, so
+readers can see which targets were trivial and which were not. No target is promoted by hand.
+
+### Expected outcome
+
+| Target | Linear in window? | Role |
+|--------|-------------------|------|
+| `p`, `v`, `a`, `j` | **Yes** — finite differences | Sanity check only. Expect R² ≈ 1.0 *and say so* |
+| `‖a + g·e₃‖` (tension) | No — norm | Eligible |
+| cable direction `p̂` | No — normalization | Eligible |
+| quadrotor attitude `R_flat` | No — cross products, SO(3) | **Preferred headline target** |
+| `p_quad` | No — nonlinear via `b₃` | Eligible |
+
+This reframes E1 into a question that is actually non-trivial:
+
+> Does the latent linearly expose the **nonlinear consequences** of the flat map — the normalizations
+> and rotations that constitute its real content — rather than merely retaining the inputs it was
+> given?
+
+Note this makes the random-init control genuinely informative rather than a formality: a random
+encoder is close to a random projection, which preserves *linear* information but does not
+manufacture nonlinear functionals. If a random-init encoder also recovers attitude, that is a
+finding about window geometry and must be reported, not hidden.
+
 ## 2. E1 — Latent recovery
 
 Fit a **linear** probe (ridge, α selected on validation) from frozen latent to F2 flat coordinates.

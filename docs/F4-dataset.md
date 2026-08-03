@@ -89,6 +89,24 @@ the latent learns.
 > Recommendation: **do all three.** Option 1 as the headline configuration, option 2 as the
 > physically meaningful target, option 3 as the control that makes either interpretable. A version
 > of E1 that hands the model its own probe target and reports R² ≈ 1.0 is not a result.
+>
+> ---
+>
+> **CORRECTION — option 1 above does not work.** With a history window as input, every
+> time-derivative is a **linear functional of that window**: velocity is a finite difference of
+> positions, acceleration a second difference, jerk a third. Feeding position only therefore leaves
+> `v`, `a`, and `j` linearly recoverable from the raw window, so the "raw input window" control
+> would also score ~1.0 and the headline result would still be vacuous — while *appearing* to have
+> been controlled for, which is worse.
+>
+> **Option 2 is the one that survives**, and it is now the headline: probe for the *nonlinear*
+> consequences of the flat map — quadrotor attitude, cable direction, tension magnitude, quadrotor
+> position — none of which are linear functionals of the state window.
+>
+> This is enforced mechanically rather than by good intentions: see the **linear-decodability
+> audit** in `F7-measurement-suite.md` §1b, which disqualifies any candidate target that a linear
+> probe on the raw input window already solves. Partial observation remains worth an *ablation*
+> (does restricting the input change what the latent organizes?), but it is not the tautology fix.
 
 ## 3. Normalization
 
