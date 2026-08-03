@@ -207,6 +207,30 @@ is reported.
 
 Remember §5.2 when probing attitude: use the **flat-map** attitude, not the CSV columns.
 
+### 5.6 `sol_u` and `d(acc)/dt` are not interchangeable
+Upstream `interpolate()` (`planner.py:1186`) fits states and inputs with **independent** cubic
+splines, and inputs use knots `time_points[:-1]` (interval starts). So on the 500 Hz maze corpus the
+`sol_u` channel is not the exact derivative of the acceleration channel: RMS relative error 9–16%
+(52% on one short file), correlation 0.95–0.99 per axis, best alignment at a ~10–20 ms lag.
+
+Use `sol_u`. It is what upstream actually fed into the flat map to produce `sol_quad_x`, so it is
+the self-consistent choice — but do not treat it as `d(acc)/dt`, and do not substitute a numerical
+derivative for it. On the 10 Hz forest corpus this is moot: those are the optimizer's own knot
+values, not a spline resampling.
+
+### 5.7 Smaller upstream landmines
+- **`experiments/maze_2` crashes upstream** with `ValueError: Initial velocity must be near zero.`
+  from `get_yaw_along_trajectory`. A genuine exit-1, correctly caught and reported by F1's driver.
+- **The flatness cross-check does not import PolyFly.** `tests/upstream_ref.py` parses upstream's
+  source with `ast`, lifts the exact function definitions, and executes them in a NumPy/SciPy
+  namespace. This is deliberate: CasADi is not installed outside the planning container, and
+  hand-copying the math would make the cross-check circular. Read that file's docstring before
+  touching it — it raises rather than silently diverging if upstream renames anything.
+- **The corpus is currently forest-type 0 only.** The first run died before reaching types 1 and 2;
+  the restarted run covers all three. Check the type distribution before treating the corpus as
+  diverse:
+  `ls ~/Desktop/polyfly_ral/data/csvs/forests/ | sed 's/.*_f\([0-9]\)_.*/f\1/' | sort | uniq -c`
+
 ## 6. Open decisions (need the author)
 
 ### 6.1 E4 — blocked, but recoverable
@@ -295,3 +319,70 @@ scripts/gen_launch.sh status                                              # gene
 find ~/Desktop/polyfly_ral/data/csvs/forests -name '*.csv' | wc -l        # corpus size
 git log --oneline -5
 ```
+
+## 10. Resuming from a fresh SSH session
+
+Host `praneetho`, LAN address `192.168.4.43`, sshd active. The `claude` CLI is at
+`~/.local/bin/claude`.
+
+### Always work inside tmux
+
+`claude` dies with the SSH connection. A dropped WiFi link mid-task loses the session, so start or
+reattach a tmux session first — it is already installed at `/usr/bin/tmux`.
+
+```bash
+ssh praneetho@192.168.4.43
+tmux new -A -s flatjepa          # create, or reattach if it exists
+cd ~/Desktop/flatjepa
+```
+
+Detach with `Ctrl-b d`. Reattach later with `tmux attach -t flatjepa`. Long jobs launched inside
+tmux survive disconnect; **nothing survives a reboot** (see §4).
+
+### Orient before doing anything
+
+```bash
+cd ~/Desktop/flatjepa
+git log --oneline -5
+scripts/gen_launch.sh status
+./.venv/bin/python -m pytest tests/ -q -m "not slow"      # ~9 s
+```
+
+If generation is not running and the corpus is short of target:
+
+```bash
+cd ~/Desktop/flatjepa && scripts/gen_launch.sh start
+```
+
+### Starting the assistant
+
+Run `claude` from `~/Desktop/flatjepa` so it picks up the repo as its working directory, then open
+with something like:
+
+> Read PROGRESS.md and docs/00-overview.md, then confirm the current state back to me before
+> changing anything. Next task is F4 (docs/F4-dataset.md). Do not add any AI attribution to code or
+> commits.
+
+The last sentence matters — a fresh session does not inherit that instruction, and §0 of this
+document is the only place it is recorded.
+
+### What a fresh session most needs to know
+
+Ordered by how much damage getting it wrong causes:
+
+1. **§0** — no AI attribution anywhere; do not loosen test tolerances.
+2. **§5.5** — the E1 tautology. The linear-decodability audit is specified but **not implemented**.
+   Building it is part of F7 and must precede any reported E1 number.
+3. **§5.1** — forest data is 10 Hz. Do not resample. Several docs originally said 20 Hz and were
+   corrected; if you find a stale reference, fix it.
+4. **§5.2** — CSV attitude is not flat-map attitude. Probing the wrong one is silently wrong by up
+   to 80° of yaw.
+5. **§3** — the container flags that fail *silently* when omitted.
+6. **§6** — two decisions that are the author's to make, not the assistant's.
+
+### Where the work is
+
+- Design specs: `docs/F1`–`F11`, each with acceptance criteria. The specs are the contract; if
+  reality contradicts a spec, correct the spec **and** say so in the commit, as was done for the
+  10 Hz and E1 findings.
+- Nothing has been trained. F4 is the blocker for F7/F8/F9/F10.
