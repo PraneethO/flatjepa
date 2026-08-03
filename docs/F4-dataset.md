@@ -11,6 +11,29 @@ with normalization statistics and leak-free splits.
 
 This is the most important detail in this document and it is easy to miss.
 
+> **CORRECTION (verified empirically).** The two corpora are written at **different rates**, and the
+> original version of this section was wrong about the one that matters.
+>
+> | Corpus | dt | Rate | Rows/traj | Source |
+> |--------|-----|------|-----------|--------|
+> | `experiments/*` (mazes) | 0.002 | 500 Hz | ~1962 | `save_result` cubic-spline interpolation |
+> | `forests/*` (**the training corpus**) | 0.1 | **10 Hz** | **~53** | planner knots, no interpolation |
+>
+> The forest generation path writes at the optimizer's own knots rather than through the 500 Hz
+> interpolation. **Consequences that override §1 as originally written:**
+>
+> 1. There is nothing to downsample. Forest data is already at 10 Hz and **cannot be resampled up
+>    to the 20 Hz target** — that target is unreachable and is hereby dropped. Windowing operates at
+>    the native 10 Hz.
+> 2. At H=10 / T=20, a 53-row trajectory yields only **~23 windows**, not the ~48 estimated earlier.
+>    Window budget must be recomputed from trajectory count accordingly.
+> 3. H=10 now covers **1.0 s** of history and T=20 covers **2.0 s** of prediction — which is
+>    physically reasonable, so the window sizes survive even though the reasoning changed.
+> 4. Knot-level `sol_u` is the optimizer's actual decision variable rather than a spline
+>    resampling, which makes it *cleaner* as an action signal than the interpolated 500 Hz version.
+>
+> Retained below for the maze corpus, where the 500 Hz reasoning still applies.
+
 Upstream `save_result` interpolates with `dt=0.002` — **500 Hz**. A measured trajectory
 (`experiments/maze_1`) has 1962 rows over ~3.92 s, confirming this.
 

@@ -62,6 +62,44 @@ trajectories the planner is free to produce — this is a real regime, not a con
 > E4 has no signal and the honest response is to say so — or to deliberately generate aggressive
 > descent scenarios to induce them. **F3's first deliverable is this histogram, not the labeler.**
 
+### ANSWERED — E4 is not viable on the forest corpus
+
+The histogram was produced (53 trajectories, 7,527 timesteps). Result:
+
+```
+margin  min 0.8411   p1 0.9207   p50 1.0217   max 1.1996     (1.0 = hover, 0.0 = free fall)
+near-slack base rate at tau = 0.5, 0.3, 0.2, 0.1, 0.05, 0.02, 0.01  ->  0 timesteps at every threshold
+```
+
+**Not one timestep approaches the slack boundary.** The near-slack class is empty at every
+threshold, so a taut-vs-slack probe has nothing to separate.
+
+**Diagnosis.** `a_z` spans only −1.57 to +1.27 m/s²; free fall requires −9.81. The closest any
+timestep comes to `−g·e₃` is 8.25 m/s². Nearly all margin variation is *lateral* acceleration
+(|a_xy| up to 6.17), which pushes margin **above** 1.0 — away from slack, not toward it.
+
+**Root cause is a generation setting, not physics.** Both base configs bound payload z to
+**[0, 0.75] m** while x/y span roughly 18 × 15 m. With a 0.75 m vertical corridor and a
+minimum-time, horizontally-directed objective, the planner never builds vertical speed. §2's claim
+that the slack corner lies inside the feasible set remains true — the trajectories simply never go
+there.
+
+**This makes E4 blocked pending a decision**, not merely a negative result, because the negative is
+explained by a config choice rather than by anything about the system or the model. Reporting
+"latent failed to discover modes" from data containing no mode transitions would be dishonest.
+
+Options, in preference order:
+
+1. **Design descent scenarios** — goal placed well below start, with a tall vertical corridor, to
+   induce near-free-fall. Note this is a genuine scenario *redesign*, not a one-line bound change:
+   simply widening z bounds is insufficient, since a minimum-time planner with start and goal at the
+   same altitude has no reason to descend at all.
+2. **Drop E4** and report the diagnosis above. E1/E2/E3 are unaffected — they are the headline and
+   do not depend on regime transitions.
+
+Whichever is chosen, F3 §5's caveat still applies: tension is a deterministic function of
+acceleration, so any E4 result must report the raw-acceleration baseline alongside the latent probe.
+
 ## 3. Outputs
 
 Per timestep:

@@ -84,7 +84,16 @@ very different natural scales and physical units; there is no a priori reason th
 embedding should be an isotropic Gaussian. This is a real tension in the method and we can measure
 it.
 
-### E4 — Hybrid mode discovery
+### E4 — Hybrid mode discovery — **BLOCKED, see F3**
+
+> The tension-margin histogram over the generated forest corpus contains **zero** near-slack
+> timesteps at every threshold swept (min margin 0.84; free fall would be 0.0). The cause is a
+> generation config — payload z is bounded to a 0.75 m corridor while x/y span ~18 × 15 m, so a
+> minimum-time horizontal objective never builds vertical speed. Running E4 on this data would
+> report "no modes discovered" from data containing no mode transitions.
+>
+> E4 requires either purpose-built descent scenarios or an explicit decision to drop it. **E1, E2,
+> and E3 are unaffected.** See `F3-taut-slack.md` for the full diagnosis.
 
 Label each timestep with cable tension sign (F3). Fit a linear probe for taut-vs-slack on the frozen
 latent, trained with **no mode supervision** during JEPA training.

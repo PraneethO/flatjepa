@@ -86,6 +86,34 @@ F6's prober has a nominal model to correct and F7 can probe for physically meani
 | `cable_dir` | (T, 3) | unit vector |
 | `tension_margin` | (T,) | passed to F3 |
 
+## 4b. CSV attitude is NOT the flat-map attitude *(verified — correctness hazard)*
+
+Confirmed empirically and by reading `planner.py:1350`. The pipeline is:
+
+```
+result = Planner.differential_flatness(...)        # flat-map attitude
+interpolated_quad_quat[i, :] = result["quat"]
+...
+interpolated_yaw, interpolated_quad_quat = get_yaw_along_trajectory(...)   # OVERWRITES it
+interpolated_rot_mat = get_rotation_matrix_from_quat(interpolated_quad_quat)
+```
+
+`get_yaw_along_trajectory` composes a rate-limited, velocity-heading yaw about world z *after* the
+flat map, and the `sol_quad_quat_*` / `rot_mat_*` CSV columns are written from that adjusted value.
+The relationship is exact:
+
+```
+R_csv = R_z(ψ) · R_flat        (residual ~8.9e-16, |ψ| up to 1.39 rad ≈ 80°)
+```
+
+Quadrotor position, velocity, and acceleration columns are written *before* that step, which is why
+they agree with the flat map to ~1e-15 while attitude does not.
+
+**Consequence:** using CSV attitude columns as flat-map ground truth is wrong by up to ~80° of yaw.
+This also invalidates the "yaw is pinned to zero" simplification stated in §2 — yaw is pinned inside
+the flat map, then reintroduced afterward. Any probe targeting attitude (F7/E1) must state which
+convention it uses; the flat-map attitude is the correct target for measuring flatness recovery.
+
 ## 5. Numerical hazards
 
 These are the places this will silently produce wrong ground truth. Each needs an explicit guard and
