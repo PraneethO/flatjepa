@@ -88,14 +88,43 @@ there.
 explained by a config choice rather than by anything about the system or the model. Reporting
 "latent failed to discover modes" from data containing no mode transitions would be dishonest.
 
+### Descent probes — E4 IS recoverable, with a purpose-built corpus
+
+Rather than guessing whether scenario redesign would help, two probe trajectories were generated and
+measured. Both solved to acceptable level.
+
+| Scenario | Drop | Vel bound | `a_z` min | **margin min** | % below τ=0.2 |
+|----------|------|-----------|-----------|----------------|---------------|
+| Forest corpus (baseline) | — | ±5 | −1.57 | 0.841 | 0% |
+| `descent/probe_1` | 6 m | ±8 | −3.97 | 0.600 | 0% |
+| `descent/probe_2` | **20 m** | **±20** | **−8.32** | **0.152** | **8.4%** |
+
+The 20 m probe reaches 24.5% of timesteps below τ=0.5, 15.0% below τ=0.3, and 8.4% below τ=0.2 —
+a workable base rate for a classification probe, and `a_z` gets to −8.32 m/s² against the −9.81
+needed for true free fall.
+
+**Conclusion: E4 is not dead, it needs its own corpus.** Three conditions are jointly required, and
+the 6 m probe shows that a modest descent is *not* enough:
+
+1. a tall vertical corridor (≳20 m drop),
+2. generous velocity bounds (±20 m/s; the default ±5 caps descent speed long before slack),
+3. terminal rest still enforced — reachable even so.
+
+The binding constraint on going further is **jerk**, not acceleration: with `input_max = 10` m/s³,
+swinging `a_z` from 0 to −9.81 and back consumes ~2 s, which is most of a short trajectory's budget.
+That is why margin bottoms out near 0.15 rather than 0.
+
 Options, in preference order:
 
-1. **Design descent scenarios** — goal placed well below start, with a tall vertical corridor, to
-   induce near-free-fall. Note this is a genuine scenario *redesign*, not a one-line bound change:
-   simply widening z bounds is insufficient, since a minimum-time planner with start and goal at the
-   same altitude has no reason to descend at all.
+1. **Generate a separate descent corpus** using the validated `descent/probe_2` configuration with
+   randomized drop heights, horizontal offsets, and obstacles. Keep it as a *distinct* corpus, not
+   mixed into the forest data — the environment distribution differs substantially, and mixing would
+   confound E1–E3.
 2. **Drop E4** and report the diagnosis above. E1/E2/E3 are unaffected — they are the headline and
    do not depend on regime transitions.
+
+F3 §5's caveat applies to option 1 regardless: tension is a deterministic function of acceleration,
+so the raw-acceleration baseline must be reported alongside any latent probe.
 
 Whichever is chosen, F3 §5's caveat still applies: tension is a deterministic function of
 acceleration, so any E4 result must report the raw-acceleration baseline alongside the latent probe.

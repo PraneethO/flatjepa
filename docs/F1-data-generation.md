@@ -118,6 +118,33 @@ yaml path, csv path, solver status, iterations, solve time, path length, total t
 the environment-split assignment. Downstream features consume the manifest, not a directory listing,
 so that failed or degenerate solves are excluded explicitly rather than by accident.
 
+## 6b. A failed solve still writes a valid-looking CSV *(verified — data-integrity hazard)*
+
+Discovered live during smoke testing: `experiments/maze_3` failed with `Solver_Failed`, and upstream
+`run()` **still called `save_result`** on the debug solution values. The result:
+
+- exit code **0**
+- a CSV present on disk, 2381 rows, 4.76 s duration, 4.50 m path length
+- structurally **indistinguishable** from a good trajectory — every structural predicate in §7 passes
+
+Compounding this: **upstream never persists solver status.** Status, iteration count, and solve time
+are printed to stdout and discarded (`planner.py:966-971`). A manifest rebuilt from CSVs alone
+therefore cannot recover them.
+
+**Consequences, all mandatory:**
+
+1. The generation driver must capture planner stdout and record the IPOPT status to a sidecar
+   (`solve_info.jsonl`) at generation time. It cannot be recovered later.
+2. Success must be derived from the recorded solver status — **not** from exit code, not from file
+   presence, and not from the `file_dir:` log line (which prints on *entry* to `save_result`, before
+   any of the work, so it appears even for failed solves).
+3. Any corpus generated without this capture has unknown provenance and may silently contain failed
+   solves presented as optimal trajectories.
+
+The forest generator appears to write only on success, which is why status-unknown records from that
+path are tolerated — but that is a property of a different code path and should not be assumed of the
+single-YAML entry point.
+
 ## 7. Quality filtering
 
 Not every solve is usable. The manifest must record and the dataset builder must be able to exclude:

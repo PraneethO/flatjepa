@@ -92,8 +92,14 @@ it.
 > minimum-time horizontal objective never builds vertical speed. Running E4 on this data would
 > report "no modes discovered" from data containing no mode transitions.
 >
-> E4 requires either purpose-built descent scenarios or an explicit decision to drop it. **E1, E2,
-> and E3 are unaffected.** See `F3-taut-slack.md` for the full diagnosis.
+> Two probe trajectories then established that E4 **is recoverable with a purpose-built corpus**: a
+> 20 m descent with ±20 m/s velocity bounds reaches margin 0.15, with 8.4% of timesteps below
+> τ=0.2 — a workable base rate. A 6 m descent is not enough (0.60). The binding constraint is the
+> jerk bound, not acceleration.
+>
+> So E4 needs a decision: generate a *separate* descent corpus (not mixed into the forest data,
+> which would confound E1–E3), or drop E4. **E1, E2, and E3 are unaffected.** See
+> `F3-taut-slack.md` for the evidence table.
 
 Label each timestep with cable tension sign (F3). Fit a linear probe for taut-vs-slack on the frozen
 latent, trained with **no mode supervision** during JEPA training.
