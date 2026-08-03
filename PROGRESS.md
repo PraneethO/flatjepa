@@ -75,8 +75,12 @@ Machine: Ubuntu 22.04 host, 16 cores, 30 GB RAM, RTX 3090 (20 GB), ~500 GB free.
 Host has **no** numpy/torch in system python. Use the project venv:
 ```bash
 cd ~/Desktop/flatjepa
-./.venv/bin/python -m pytest tests/ -q          # 189 should pass
+./.venv/bin/python -m pytest tests/ -q                  # 189 pass, ~33 s
+./.venv/bin/python -m pytest tests/ -q -m "not slow"    # 188 pass, ~9 s
 ```
+`tests/conftest.py` pins torch to a single thread. Without it the suite takes **12+ minutes** during
+a generation run (torch's per-core threads fight the 14 pinned planner workers) and looks hung. Do
+not remove it.
 Created with `virtualenv` (not `python3 -m venv`, which needs the `python3.10-venv` system package).
 Contains torch 2.13 **CPU**, numpy, scipy, pandas, pyyaml, matplotlib, pytest.
 
@@ -286,7 +290,7 @@ Note the planner **rewrites these YAMLs in place** on solve, writing the global 
 
 ```bash
 cd ~/Desktop/flatjepa
-./.venv/bin/python -m pytest tests/ -q                                    # expect 189 passed
+./.venv/bin/python -m pytest tests/ -q                                    # expect 189 passed, ~33 s
 scripts/gen_launch.sh status                                              # generation state
 find ~/Desktop/polyfly_ral/data/csvs/forests -name '*.csv' | wc -l        # corpus size
 git log --oneline -5

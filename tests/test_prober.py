@@ -176,6 +176,7 @@ def test_zero_initialized_residual_head_starts_at_nominal_physics():
 # ------------------------------------------------------------------ the residual head
 
 
+@pytest.mark.slow
 def test_residual_head_can_fit_non_zero_targets():
     """F6 §3's required companion control: "residual ≈ 0" only means something if the head is not
     dead.  Fit the prober to a trajectory generated with a known non-zero jerk perturbation and
