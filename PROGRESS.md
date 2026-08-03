@@ -1,127 +1,274 @@
 # Progress / Handoff
 
-Last updated: 2026-08-02, late evening. Written mid-session because of a usage limit
-(resets 3:20am America/Los_Angeles).
+Last updated: 2026-08-03 morning.
 
-Repo: https://github.com/PraneethO/flatjepa (public, PraneethO). All work pushed through
-commit `b4e5194`.
+**This document is written to be self-contained.** A fresh session with no prior context should be
+able to pick up the project from here. Read this, then `docs/00-overview.md`.
+
+Repo: https://github.com/PraneethO/flatjepa (public, owner `PraneethO`).
 
 ---
 
-## Where things stand
+## 0. Ground rules
 
-| Feature | State |
-|---------|-------|
-| F1 generation driver + manifest | **Done**, 68 tests pass |
-| F2 flat-output extractor | **Done**, agrees with upstream to ~1e-15 |
-| F3 tension / taut-slack | **Done**, histogram produced, E4 decision surfaced |
-| F4 dataset builder | **Not started** — next critical path item |
-| F5 JEPA core | **Done** (encoders, predictor, SIGReg, jepa, diagnostics) |
-| F6 physics prober | **Done**, all tests pass |
-| F7 measurement suite | **Not started** |
-| F8 training harness | **Not started** |
-| F9 evaluation/figures | **Not started** |
-| F10 baselines | **Not started** |
+- **Do not add any AI/Claude/Anthropic attribution anywhere** — not in code, comments, docstrings,
+  commit messages, or co-author trailers. This is the author's explicit standing instruction. All
+  commits are authored as Praneeth Otthi <potthi@berkeley.edu>.
+- Never modify the upstream checkout at `~/Desktop/polyfly_ral` except for the parameter files
+  listed in §8, which this project authored.
+- Do not loosen a test tolerance to make a test pass. If a threshold is unreachable, replace the
+  criterion with a better-posed one and say so.
 
-Test suite: **189 passed, 0 failed.**
+## 1. What this project is
 
-The prober's "dead head" control test (F6 §3) was the last thing outstanding and is now fixed. It
-had asserted an absolute loss floor of 1e-4, which is the wrong criterion — the optimisation
-plateaus near 3e-4 regardless of step count, so any absolute threshold is unreachable or arbitrary.
-It now asserts a large *relative* improvement against the model's own untrained starting point
-(95% reduction, at 2000 steps) plus the decisive check that the residual becomes substantially
-non-zero. The tolerance was not loosened to force a pass; the criterion was replaced with a
-better-posed one.
+**Hypothesis:** a differentially flat system provides analytic ground truth for the minimal
+sufficient latent of its own dynamics, so on such a system JEPA representation quality can be
+measured *directly* rather than inferred from downstream task performance.
 
-## Data generation
+Standard JEPA evaluation is indirect — you measure downstream reward and cannot separate "the
+representation captured the state" from "the predictor learned the dynamics" from "the controller is
+good." A differentially flat system has a closed-form map from a few flat outputs to the entire
+state, so the correct latent is known in both dimension and content.
 
-**Still running** in the background (`gen_all.sh`, nohup). 3 forest types × 4 seeds × `-n 40`,
-`--mp --pin` across 16 cores. ~71+ forest CSVs at last check, target ~4300.
+The system is a quadrotor with a cable-suspended payload, using trajectories from the PolyFly
+optimal planner ([arXiv:2510.15226](https://arxiv.org/abs/2510.15226)). Architecture is adapted from
+SkyJEPA ([arXiv:2606.23444](https://arxiv.org/abs/2606.23444)): TCN state/action encoders, GRU latent
+predictor, SIGReg anti-collapse, and a physics-inspired prober using differentiable kinematic
+integration.
 
-Check status:
+Experiments (full detail in `docs/00-overview.md` §4):
+
+| ID | Question |
+|----|----------|
+| E1 | Does the latent recover the flat outputs? (linear probe, R²) |
+| E2 | Is effective dimensionality ≈ **9**, the known minimal state? |
+| E3 | **Headline.** Does SIGReg help or hurt recovery? Flat coordinates are intrinsically non-isotropic, so enforcing isotropy may distort them |
+| E4 | Does the latent discover the taut/slack hybrid boundary? (**blocked — see §6**) |
+| E5 | Does the prober residual localize flatness-assumption violations? |
+
+## 2. Current state
+
+| Feature | Status | Doc |
+|---------|--------|-----|
+| F1 generation driver + manifest | **Done** | `docs/F1-data-generation.md` |
+| F2 flat-output extractor | **Done**, agrees with upstream to ~1e-15 | `docs/F2-flat-outputs.md` |
+| F3 tension / taut-slack | **Done** | `docs/F3-taut-slack.md` |
+| F4 dataset builder | **NOT STARTED — critical path** | `docs/F4-dataset.md` |
+| F5 JEPA core | **Done** | `docs/F5-jepa-core.md` |
+| F6 physics prober | **Done** | `docs/F6-physics-prober.md` |
+| F7 measurement suite | **NOT STARTED** | `docs/F7-measurement-suite.md` |
+| F8 training harness | **NOT STARTED** | `docs/F8-training-harness.md` |
+| F9 evaluation / figures | **NOT STARTED** | `docs/F9-evaluation.md` |
+| F10 baselines | **NOT STARTED** | `docs/F10-baselines.md` |
+| F11 perception | Deferred by design | `docs/F11-deferred-perception.md` |
+
+**Test suite: 189 passed, 0 failed.**
+
+Nothing has been trained yet. No model has seen data. Everything so far is data plumbing, model
+code, and the measurement plan.
+
+## 3. Environment
+
+Machine: Ubuntu 22.04 host, 16 cores, 30 GB RAM, RTX 3090 (20 GB), ~500 GB free.
+
+### Python
+Host has **no** numpy/torch in system python. Use the project venv:
 ```bash
-pgrep -f gen_all.sh && find ~/Desktop/polyfly_ral/data/csvs/forests -name '*.csv' | wc -l
+cd ~/Desktop/flatjepa
+./.venv/bin/python -m pytest tests/ -q          # 189 should pass
+```
+Created with `virtualenv` (not `python3 -m venv`, which needs the `python3.10-venv` system package).
+Contains torch 2.13 **CPU**, numpy, scipy, pandas, pyyaml, matplotlib, pytest.
+
+### Containers (two, by design — do not merge)
+
+**`poly-fly:latest`** — planning/data generation. CasADi + IPOPT, CPU only.
+Python at `/opt/conda/envs/poly_fly/bin/python` (NOT on `PATH` under `bash -lc`).
+
+Three things are mandatory or it fails, two of them silently:
+```bash
+docker run --rm --user "$(id -u):$(id -g)" \
+  -v "$HOME/Desktop/polyfly_ral:/workspace:rw" \
+  -v "$HOME/Desktop/flatjepa/scripts/shim:/shim:ro" \
+  -e POLYFLY_DIR=/workspace -e PYTHONPATH=/shim:/workspace/src \
+  -e MPLBACKEND=Agg -e HOME=/tmp \
+  --workdir /workspace poly-fly:latest \
+  /opt/conda/envs/poly_fly/bin/python -m poly_fly.optimal_planner.planner --yaml experiments/maze_1.yaml
+```
+- `--user "$(id -u):$(id -g)"` + `HOME=/tmp` — the image ends with `USER mambauser`, which cannot
+  write to the bind mount. **The solve reports success and only the exit code reveals the failure.**
+- `scripts/shim/sitecustomize.py` first on `PYTHONPATH` — upstream hardcodes
+  `matplotlib.use('TkAgg')` at import, which raises headless. The shim neutralizes it without
+  patching upstream.
+
+**`ros-jazzy:pytorch`** — GPU training. Ubuntu 24.04, ROS 2 Jazzy, Python 3.12, torch 2.13.0+cu130.
+GPU verified working:
+```bash
+docker run --rm --gpus all ros-jazzy:pytorch python3 -c "import torch;print(torch.cuda.is_available())"
+```
+Missing pandas/casadi — install into the image or the training code should avoid pandas.
+
+### Tools
+`gh` CLI at `~/.local/bin/gh`, authenticated as `PraneethO`. Git remote uses SSH.
+
+## 4. Data generation
+
+**Currently RUNNING** (restarted 2026-08-03 09:44).
+
+```bash
+cd ~/Desktop/flatjepa
+scripts/gen_launch.sh status     # running? how many trajectories?
+scripts/gen_launch.sh start      # launch detached (survives SSH disconnect)
+scripts/gen_launch.sh stop       # stop driver + any planner containers
 ```
 
-Logs in the session scratchpad: `gen_ft{0,1,2}_s{101,202,303,404}.log`.
+Driver log: `logs/gen_all.log`. Per-phase logs: `logs/gen_ft{TYPE}_s{SEED}.log`. `logs/` is
+gitignored.
 
-**If it died**, re-run `gen_all.sh` — generation is idempotent at the environment level via F1's
-driver, though `gen_all.sh` itself is a simple loop and will redo work.
+Tunables (env vars): `FOREST_TYPES`, `SEEDS`, `N_PER_SEED`, `TARGET_CSVS`, `LIBHSL_DIR`.
 
-## Findings that change the plan
+**Current corpus:** ~198+ forest trajectories, all forest-type 0, at
+`~/Desktop/polyfly_ral/data/csvs/forests/`. Plus 1 maze and 2 descent probes.
 
-These are all documented in `docs/` with evidence. They matter more than the code.
+**⚠️ A previous run was lost to a reboot.** The machine rebooted at 2026-08-02 23:45, killing the
+job and wiping `/tmp`, where the original driver script and all logs lived. That is why the driver
+now lives in `scripts/` and logs in `logs/`. `gen_launch.sh` survives SSH disconnect but **not a
+reboot** — after any reboot, re-run `scripts/gen_launch.sh start`.
 
-### 1. Forest CSVs are 10 Hz, not 500 Hz
-`generate_forest.py:537` calls `save_result(..., dt=0.1)`. Only the maze corpus goes through 500 Hz
-interpolation. **F4's plan to stride-25 down to 20 Hz is impossible** and has been dropped —
-windowing runs at native 10 Hz. Trajectories are ~47–122 rows, giving ~20 windows each at H=10/T=20.
+Throughput: ~15.6 s/trajectory sequential; with `--mp --pin` the machine saturates all 16 cores.
+MA57/HSL would be ~3× faster but needs an academic license; the driver passes `LIBHSL_DIR` through
+if you ever set it, no code change needed.
 
-### 2. CSV attitude is NOT the flat-map attitude
+## 5. Findings that change the plan
+
+**These matter more than the code.** All are verified, not assumed, and are documented in the
+relevant feature doc.
+
+### 5.1 Forest CSVs are 10 Hz, not 500 Hz
+`generate_forest.py:537` calls `save_result(..., dt=0.1)`. Only the maze corpus goes through the
+500 Hz interpolation. Forest trajectories are **47–122 rows**. F4's original plan to stride-25 down
+to 20 Hz is **impossible** and has been dropped — window at native 10 Hz. At H=10/T=20, a ~53-row
+trajectory yields only ~20 windows.
+
+### 5.2 CSV attitude is NOT the flat-map attitude
 Upstream applies `get_yaw_along_trajectory` *after* `differential_flatness` (`planner.py:1350`), so
-`R_csv = R_z(ψ)·R_flat` with |ψ| up to 1.39 rad (~80°). Position/velocity/acceleration columns are
-written *before* that step and do agree to ~1e-15. **Anything probing attitude must use the flat-map
-attitude, not the CSV columns.**
+`R_csv = R_z(ψ)·R_flat`, |ψ| up to 1.39 rad (~80°). Position/velocity/acceleration columns are
+written *before* that step and do agree to ~1e-15. **Any probe targeting attitude must use the
+flat-map attitude**, not the CSV columns, or it is silently wrong by up to 80° of yaw.
 
-### 3. A failed solve still writes a valid-looking CSV
-`maze_3` failed with `Solver_Failed` but produced a 2381-row CSV, exit code 0, passing every
-structural check. Upstream never persists solver status — it prints to stdout and discards it. **Any
-corpus generated without capturing stdout has unknown provenance.**
+### 5.3 A failed solve still writes a valid-looking CSV
+`experiments/maze_3` failed with `Solver_Failed`, yet `run()` still called `save_result`, producing a
+2381-row CSV with exit code 0 that passes every structural check. Compounding it, **upstream never
+persists solver status** — it prints to stdout and discards it (`planner.py:966-971`).
 
-### 4. E4 is blocked but recoverable — **needs a decision**
-The forest corpus contains **zero** near-slack timesteps at any threshold (min margin 0.84; free
-fall = 0.0). Cause: payload z is bounded to a 0.75 m corridor while x/y span ~18×15 m.
+Therefore: capture planner stdout at generation time and record IPOPT status to a sidecar. It cannot
+be recovered afterwards. Do not infer success from exit code, file presence, or the `file_dir:` log
+line (which prints on *entry* to `save_result`, before any work).
 
-Two probe trajectories were generated to test whether scenario redesign helps:
+### 5.4 Splits must key on environment, not trajectory
+One forest seed yields multiple trajectories sharing one obstacle field. A per-trajectory split puts
+the same layout on both sides. `src/flatjepa/data/manifest.py` already keys splits on `env_id`
+parsed from the stem, and uses per-environment *hashing* rather than seeded shuffling so that
+appending new environments to a growing corpus cannot silently move a previously-tested environment
+into training. This matters because generation is ongoing.
 
-| Scenario | Drop | Vel bound | margin min | % below τ=0.2 |
-|---|---|---|---|---|
-| Forest (baseline) | — | ±5 | 0.841 | 0% |
-| `descent/probe_1` | 6 m | ±8 | 0.600 | 0% |
-| `descent/probe_2` | **20 m** | **±20** | **0.152** | **8.4%** |
-
-**E4 is recoverable with a dedicated descent corpus.** A 6 m drop is not enough. The binding
-constraint is the jerk bound (±10 m/s³), not acceleration.
-
-**Open decision for Praneeth:** generate a separate descent corpus (kept distinct from the forest
-data, since mixing would confound E1–E3), or drop E4. E1/E2/E3 are unaffected either way.
-
-### 5. E1 risks being tautological — unresolved design issue
+### 5.5 E1 risks being tautological — **UNRESOLVED, must fix before E1 means anything**
 See `docs/F4-dataset.md` §2. If the model input is `sol_x = (p,v,a)` and the probe target is
-`(p,v,a)`, the network is handed its own answer. **This must be resolved before E1 means anything.**
-Planned mitigation: partial observation as the headline config, attitude/cable-direction as the
-physically meaningful targets, random-init encoder as the control. Not yet implemented.
+`(p,v,a)`, the network is handed its own answer and R² ≈ 1.0 proves nothing.
 
-## Next steps, in order
+Planned mitigation, not yet implemented:
+1. Feed a **partial** observation (e.g. position only) as the headline configuration, so recovering
+   acceleration/jerk is genuinely inferential.
+2. Probe for quantities not in the input at all: quadrotor attitude, cable direction.
+3. Always report the **random-init encoder** control to quantify what is trivially present.
 
-1. **F4 dataset builder** — the critical path blocker for everything downstream. Must respect: 10 Hz
-   native rate, environment-level splits (F1's manifest already provides them), train-split-only
-   normalization, relative positions, and the E1 tautology mitigation above.
-2. **F8 training harness** → first JEPA training run on GPU (use the `ros-jazzy:pytorch` container,
-   torch 2.13+cu130, verified working on the RTX 3090 with `--gpus all`).
-3. **F7 measurement suite** → E5-a zero-residual check first (it gates trust in everything), then
-   E1/E2/E3.
-4. Decide E4.
+Do all three. This is the single most likely way this project produces a meaningless positive.
 
-## Environment notes
+## 6. Open decisions (need the author)
 
-- Host venv: `/home/praneetho/Desktop/flatjepa/.venv` (created with `virtualenv`, since `python3 -m
-  venv` needs the `python3.10-venv` system package). torch 2.13 CPU, numpy, scipy, pandas, pytest.
-- Tests: `./.venv/bin/python -m pytest tests/ -q`
-- Data generation container: `poly-fly:latest`, python at
-  `/opt/conda/envs/poly_fly/bin/python`. Requires `--user "$(id -u):$(id -g)"`, `HOME=/tmp`, the
-  `scripts/shim/sitecustomize.py` first on `PYTHONPATH`, and `MPLBACKEND=Agg`.
-- GPU training container: `ros-jazzy:pytorch` with `--gpus all`.
-- `gh` CLI installed at `~/.local/bin/gh`.
+### 6.1 E4 — blocked, but recoverable
+The forest corpus contains **zero** near-slack timesteps at every threshold (min tension margin
+0.841; free fall = 0.0). Cause: payload z is bounded to a 0.75 m corridor while x/y span ~18×15 m,
+so a minimum-time horizontal objective never builds vertical speed.
 
-## Files authored in the upstream polyfly_ral checkout
+Two probes were generated to test whether scenario redesign helps:
 
-These are new/untracked in `~/Desktop/polyfly_ral` and are **not** part of upstream:
+| Scenario | Drop | Vel bound | `a_z` min | margin min | % below τ=0.2 |
+|---|---|---|---|---|---|
+| Forest (baseline) | — | ±5 | −1.57 | 0.841 | 0% |
+| `descent/probe_1` | 6 m | ±8 | −3.97 | 0.600 | 0% |
+| `descent/probe_2` | **20 m** | **±20** | **−8.32** | **0.152** | **8.4%** |
 
-- `data/params/forests/base.yaml` — required by `generate_forest.py`, not shipped. State bounds
-  widened to cover the forest extent; `tube_distance: 10` copied from generated mazes. Assumptions
-  documented in `docs/F1-data-generation.md` §3b.
-- `data/params/descent/{base,probe_1,probe_2}.yaml` — the E4 descent probes.
+**E4 is recoverable with a dedicated descent corpus** built from the `descent/probe_2` config with
+randomized drop heights/offsets/obstacles. A 6 m drop is not enough. The binding constraint is the
+**jerk** bound (±10 m/s³), not acceleration: swinging `a_z` from 0 to −9.81 and back costs ~2 s.
 
-Note the planner **rewrites** these YAMLs in place on solve (it writes the global plan back into
-`payload_pos_init`), so they will look different from as-authored.
+Keep such a corpus **separate** from the forest data — the environment distribution differs
+substantially and mixing would confound E1–E3.
+
+**Decision needed:** build the descent corpus, or drop E4 and report the diagnosis. E1/E2/E3 are
+unaffected either way.
+
+### 6.2 `forests/base.yaml` was authored by this project
+Upstream does not ship it and `generate_forest.py` cannot run without it. State bounds were widened
+to cover the forest extent and `tube_distance: 10` was copied from generated mazes. Documented in
+`docs/F1-data-generation.md` §3b. If these differ from what the PolyFly authors used, trajectories
+are still valid optimal solutions but not to the same problem as the paper — fine for the
+self-contained flatness experiments, **not** fine for any comparison to published PolyFly results.
+
+## 7. Next steps, in order
+
+### Step 1 — F4 dataset builder *(critical path, blocks everything)*
+Spec: `docs/F4-dataset.md`. Must respect:
+- **10 Hz native rate** (§5.1) — do not resample
+- environment-level splits — consume `src/flatjepa/data/manifest.py`, do not re-derive
+- normalization statistics from the **training split only**
+- positions **relative** to the window's last history frame, never absolute world coordinates
+- exclude timesteps failing F2's validity mask
+- the E1 tautology mitigation (§5.5) — make the observed-state subset configurable
+- no window may cross a trajectory boundary
+
+Existing pieces to build on: `src/flatjepa/data/csv_io.py` (loader), `flatness.py` (ground truth),
+`tension.py` (labels), `manifest.py` (splits + quality filters).
+
+### Step 2 — F8 training harness
+Two-stage: (1) encoders + predictor on `L_pred + λ·L_SIGReg`; (2) freeze stage 1, train the prober.
+**Assert the freeze** — verify stage-1 params have zero gradient in stage 2, or every claim about
+probing *frozen* representations is void. Log collapse diagnostics every epoch with an alarm
+(`src/flatjepa/models/diagnostics.py` exists) so an overnight run does not spend hours training a
+constant function.
+
+### Step 3 — first training run on GPU
+Use `ros-jazzy:pytorch` with `--gpus all`.
+
+### Step 4 — F7 measurement suite
+**Run E5-a first** — the zero-residual calibration check. Trained on flatness-consistent data the
+residual must converge to ~0. It has an unambiguous physically-determined correct answer and it
+gates trust in everything else. The companion control (residual head *can* fit non-zero targets) is
+already tested in `tests/test_prober.py`.
+
+Then E1/E2/E3. Every probe result needs all three controls from F7 §1 (random-init encoder, raw
+input window, shuffled labels) reported *in the same figure*. Multi-seed (≥3) with spread by
+default.
+
+### Step 5 — F10 baselines, F9 figures, then decide E4.
+
+## 8. Files this project authored inside the upstream checkout
+
+New/untracked in `~/Desktop/polyfly_ral`, **not** part of upstream:
+
+- `data/params/forests/base.yaml` — required by `generate_forest.py`, not shipped (see §6.2)
+- `data/params/descent/{base,probe_1,probe_2}.yaml` — the E4 descent probes
+
+Note the planner **rewrites these YAMLs in place** on solve, writing the global plan back into
+`payload_pos_init`, so they no longer look as authored.
+
+## 9. Quick health check
+
+```bash
+cd ~/Desktop/flatjepa
+./.venv/bin/python -m pytest tests/ -q                                    # expect 189 passed
+scripts/gen_launch.sh status                                              # generation state
+find ~/Desktop/polyfly_ral/data/csvs/forests -name '*.csv' | wc -l        # corpus size
+git log --oneline -5
+```
