@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "flatjepa"
+version = "0.1.0"
+description = "Measuring JEPA world-model representations against differential-flatness ground truth."
+readme = "README.md"
+authors = [{ name = "Praneeth Otthi", email = "potthi@berkeley.edu" }]
+license = { text = "MIT" }
+requires-python = ">=3.10"
+
+dependencies = [
+    "numpy>=1.26",
+    "scipy>=1.10",
+    "pandas>=2.0",
+    "pyyaml>=6.0",
+    "torch>=2.4",
+    "matplotlib>=3.6",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7.0", "black>=24.0", "ruff>=0.4"]
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.black]
+line-length = 100
+skip-string-normalization = true
+
+[tool.ruff]
+line-length = 100
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

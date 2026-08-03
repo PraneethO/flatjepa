@@ -1,0 +1,39 @@
+# Data and artifacts (top-level only — src/flatjepa/data/ is source, not data)
+/data/
+/runs/
+/checkpoints/
+/outputs/
+/wandb/
+*.npz
+*.zarr
+*.ckpt
+*.pt
+*.pth
+
+# Logs
+*.log
+logs/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+.ipynb_checkpoints/
+
+# Tooling
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+*.swp
