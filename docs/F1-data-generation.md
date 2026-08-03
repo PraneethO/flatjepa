@@ -61,6 +61,28 @@ docker run --rm --user "$(id -u):$(id -g)" \
   /opt/conda/envs/poly_fly/bin/python -m poly_fly.optimal_planner.planner --yaml <relative.yaml>
 ```
 
+## 3b. Authored upstream config — an assumption to revisit
+
+The upstream repository ships `data/params/experiments/base.yaml` but **not**
+`data/params/forests/base.yaml`, which `generate_forest.py` requires. Forest generation fails
+without it.
+
+That file was therefore authored for this project. Two things about it are judgment calls rather
+than upstream fact, and both should be revisited if trajectory quality looks wrong:
+
+1. **State bounds.** `forest_params.py` places obstacles over `x ∈ [0, 16]`, `y ∈ [−7, 7]` with the
+   goal at `x = 15`, but the shipped experiments config bounds position to `x ≤ 5`. Bounds were
+   widened to `state_max: [17, 7.5, 0.75, ...]` / `state_min: [-1, -7.5, 0, ...]` to cover the
+   forest extent. Velocity, acceleration, and input bounds were left at the upstream values —
+   notably acceleration remains ±10 m/s², which is what makes the slack regime reachable (see F3).
+2. **`tube_distance: 10`.** Required by the `MPC` dataclass, absent from the experiments base
+   config, present as `10` in the generated maze YAMLs. Copied from those.
+
+**Risk:** if these differ from what the PolyFly authors used, generated trajectories are still
+valid optimal solutions to *a* problem, but not necessarily to the same problem as the paper. This
+does not affect the flatness-recovery experiments, which are self-contained — but it does affect any
+comparison to published PolyFly results.
+
 ## 4. Environment sampling
 
 Trajectory diversity comes from varying the environment YAML, not from noise. Two sources:
