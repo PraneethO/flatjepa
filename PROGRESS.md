@@ -57,7 +57,7 @@ Experiments (full detail in `docs/00-overview.md` §4):
 | F1 generation driver + manifest | **Done** | `docs/F1-data-generation.md` |
 | F2 flat-output extractor | **Done**, agrees with upstream to ~1e-15 | `docs/F2-flat-outputs.md` |
 | F3 tension / taut-slack | **Done** | `docs/F3-taut-slack.md` |
-| F4 dataset builder | **NOT STARTED — critical path** | `docs/F4-dataset.md` |
+| F4 dataset builder | **Done** — 37,180 windows built | `docs/F4-dataset.md` |
 | F5 JEPA core | **Done** | `docs/F5-jepa-core.md` |
 | F6 physics prober | **Done** | `docs/F6-physics-prober.md` |
 | F7 measurement suite | **NOT STARTED** | `docs/F7-measurement-suite.md` |
@@ -66,10 +66,17 @@ Experiments (full detail in `docs/00-overview.md` §4):
 | F10 baselines | **NOT STARTED** | `docs/F10-baselines.md` |
 | F11 perception | Deferred by design | `docs/F11-deferred-perception.md` |
 
-**Test suite: 189 passed, 0 failed.**
+**Test suite: 230 passed, 0 failed.**
 
-Nothing has been trained yet. No model has seen data. Everything so far is data plumbing, model
-code, and the measurement plan.
+Nothing has been trained yet. No model has seen data — but the dataset now exists and the E1
+methodology has been validated against it (see §5.8).
+
+Built dataset: `data/windows_v1/` — 37,180 windows from 1,187 forest trajectories
+(27,796 train / 4,566 val / 4,818 test), 10 Hz, environment-level splits, train-only normalisation.
+Rebuild with the snippet in §7. The F1 manifest is at `data/manifest.jsonl` (1,190 records,
+238 environments).
+
+**Next: F8 training harness, then the first training run.**
 
 ## 3. Environment
 
@@ -211,6 +218,35 @@ is reported.
 
 Remember §5.2 when probing attitude: use the **flat-map** attitude, not the CSV columns.
 
+### 5.8 The E1 methodology is validated on real data
+`scripts/linear_audit.py` fits a ridge probe from the raw input window to every candidate target.
+On the real corpus:
+
+```
+v               linear_trivial    1.0000   DISQUALIFIED
+a               linear_trivial    1.0000   DISQUALIFIED
+j               linear_trivial    0.9919   DISQUALIFIED
+cable_dir       nonlinear         0.6945   eligible
+R_quad_cols     nonlinear         0.3996   eligible
+p_quad          nonlinear         0.6945   eligible
+tension_margin  nonlinear         0.5035   eligible
+```
+
+Probing for the state the model was fed would have scored a perfect 1.0000 and meant nothing —
+confirmed empirically, not hypothetically. The nonlinear targets sit at 0.40–0.69 from the raw
+window, leaving real headroom for a trained encoder to improve on, which is what makes E1 a
+question rather than a formality.
+
+The audit also caught a degenerate target of my own: payload position at the anchor is identically
+zero once positions are anchor-relative. Removed, with tests preventing recurrence. Re-run the audit
+whenever the window config changes.
+
+### 5.9 Only forest types 0 and 2 exist
+`forest_params.py` defines `FOREST_SMALL_OBS id=0` and `FOREST_LARGE_OBS id=2`; `generate_forest.py`
+hits a bare `raise Exception()` for anything else — **per trajectory, while still exiting 0**, so a
+type-1 phase reports "0/360 succeeded" and looks like a real run. `gen_all.sh` now defaults to
+`"0 2"` and warns on anything else.
+
 ### 5.6 `sol_u` and `d(acc)/dt` are not interchangeable
 Upstream `interpolate()` (`planner.py:1186`) fits states and inputs with **independent** cubic
 splines, and inputs use knots `time_points[:-1]` (interval starts). So on the 500 Hz maze corpus the
@@ -269,7 +305,24 @@ self-contained flatness experiments, **not** fine for any comparison to publishe
 
 ## 7. Next steps, in order
 
-### Step 1 — F4 dataset builder *(critical path, blocks everything)*
+### Step 0 — rebuild the dataset when the corpus grows *(done once, repeat as needed)*
+```bash
+cd ~/Desktop/flatjepa
+./.venv/bin/python scripts/generate_data.py manifest --polyfly-repo ~/Desktop/polyfly_ral
+./.venv/bin/python -c "
+from pathlib import Path; import subprocess
+from flatjepa.data.manifest import read_manifest, filter_records
+from flatjepa.data.dataset import build_dataset
+from flatjepa.data.windows import WindowConfig
+kept,_ = filter_records(read_manifest(Path('data/manifest.jsonl')))
+forest = [r for r in kept if r.source == 'forest']
+c = subprocess.run(['git','rev-parse','--short','HEAD'],capture_output=True,text=True).stdout.strip()
+print(build_dataset(forest,'data/windows_v1',config=WindowConfig(10,20),
+                    extra_metadata={'commit':c,'corpus':'forests'}).format())"
+./.venv/bin/python scripts/linear_audit.py --dataset data/windows_v1
+```
+
+### Step 1 — F4 dataset builder *(DONE)*
 Spec: `docs/F4-dataset.md`. Must respect:
 - **10 Hz native rate** (§5.1) — do not resample
 - environment-level splits — consume `src/flatjepa/data/manifest.py`, do not re-derive
