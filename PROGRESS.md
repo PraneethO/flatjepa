@@ -63,7 +63,7 @@ Experiments (full detail in `docs/00-overview.md` §4):
 | F7 measurement suite | **Done** | `docs/F7-measurement-suite.md` |
 | F8 training harness | **Done** | `docs/F8-training-harness.md` |
 | F9 evaluation / figures | **Done** | `docs/F9-evaluation.md` |
-| F10 baselines | **NOT STARTED** | `docs/F10-baselines.md` |
+| F10 baselines | **Code done**, not yet run | `docs/F10-baselines.md` |
 | F11 perception | Deferred by design | `docs/F11-deferred-perception.md` |
 
 **Test suite: 230 passed, 0 failed.**
@@ -90,7 +90,24 @@ docker run --rm --gpus all --user "$(id -u):$(id -g)" -e HOME=/tmp -v "$PWD:/w" 
 Note `--user` and `HOME=/tmp`: without them the container writes root-owned files into the repo,
 same as the planner image.
 
-**Next: E4 decision (§6.1), and F10 baselines.**
+## RESULTS EXIST — see `outputs/e1e3/RESULTS.md`
+
+30 runs, 3 seeds, λ and width sweeps. **E1 and E2 are negative results.** The trained encoder scores
+*below* a random-init encoder on 6 of 7 targets, and effective dimensionality tracks allocated width
+(1.3–5.1) rather than converging on the theoretical 9. F7 §1's stopping condition is met.
+
+E3 shows the predicted dissociation but contradicts two design premises: λ=0 does **not** collapse
+and gives the lowest prediction loss, while λ=1 collapses 2/3 seeds to participation ratio 1.01.
+A direct probe (`scripts/sigreg_rank_probe.py`) shows the penalty is **not monotone in rank** —
+rank-9 scores 0.5148 vs rank-1 at 0.1668.
+
+**Top open item: verify the SIGReg implementation against
+[rbalestr-lab/lejepa](https://github.com/rbalestr-lab/lejepa)**, specifically whether embeddings are
+standardised before the projection test. That would remove the scale confound and is the difference
+between "our implementation has a bug" and "the method has this property". Do not claim the latter
+until checked.
+
+**Then: F10 baselines (code written, not run), and the E4 decision (§6.1).**
 
 ## 3. Environment
 
