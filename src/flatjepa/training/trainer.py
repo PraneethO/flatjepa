@@ -220,7 +220,7 @@ class Trainer:
                 bs = batch["state_hist"].shape[0]
                 n += bs
                 for k in totals:
-                    totals[k] += float(out[k]) * bs
+                    totals[k] += float(out[k].detach()) * bs
                 ps = out["per_step_loss"].detach().cpu()
                 per_step_sum = ps * bs if per_step_sum is None else per_step_sum + ps * bs
 
@@ -354,7 +354,7 @@ class Trainer:
                 bs = batch["state_hist"].shape[0]
                 n += bs
                 tot += float(loss) * bs
-                res_mag += float(out["residual"].abs().mean()) * bs
+                res_mag += float(out["residual"].detach().abs().mean()) * bs
 
             # The freeze must still hold after a full epoch of stage-2 optimization.
             assert_frozen(self.model, "JEPA core")
