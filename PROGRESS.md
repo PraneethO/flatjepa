@@ -60,9 +60,9 @@ Experiments (full detail in `docs/00-overview.md` §4):
 | F4 dataset builder | **Done** — 37,180 windows built | `docs/F4-dataset.md` |
 | F5 JEPA core | **Done** | `docs/F5-jepa-core.md` |
 | F6 physics prober | **Done** | `docs/F6-physics-prober.md` |
-| F7 measurement suite | **NOT STARTED** | `docs/F7-measurement-suite.md` |
-| F8 training harness | **NOT STARTED** | `docs/F8-training-harness.md` |
-| F9 evaluation / figures | **NOT STARTED** | `docs/F9-evaluation.md` |
+| F7 measurement suite | **Done** | `docs/F7-measurement-suite.md` |
+| F8 training harness | **Done** | `docs/F8-training-harness.md` |
+| F9 evaluation / figures | **Done** | `docs/F9-evaluation.md` |
 | F10 baselines | **NOT STARTED** | `docs/F10-baselines.md` |
 | F11 perception | Deferred by design | `docs/F11-deferred-perception.md` |
 
@@ -76,7 +76,21 @@ Built dataset: `data/windows_v1/` — 37,180 windows from 1,187 forest trajector
 Rebuild with the snippet in §7. The F1 manifest is at `data/manifest.jsonl` (1,190 records,
 238 environments).
 
-**Next: F8 training harness, then the first training run.**
+**Training works.** ~1 s/epoch on 27,796 windows with GPU-resident data. Run the full experiment:
+
+```bash
+docker run --rm --gpus all --user "$(id -u):$(id -g)" -e HOME=/tmp -v "$PWD:/w" -w /w \
+  ros-jazzy:pytorch bash -c 'PYTHONPATH=/w/src python3 scripts/experiment.py \
+  --out outputs/e1e3 --runs-root runs/e1e3 --seeds 0 1 2 \
+  --lambdas 0.0 0.01 0.1 1.0 10.0 --widths 4 8 16 24 48 96 --epochs 60 --jobs 6'
+docker run --rm --gpus all --user "$(id -u):$(id -g)" -e HOME=/tmp -v "$PWD:/w" -w /w \
+  ros-jazzy:pytorch bash -c 'PYTHONPATH=/w/src python3 scripts/report.py'
+```
+
+Note `--user` and `HOME=/tmp`: without them the container writes root-owned files into the repo,
+same as the planner image.
+
+**Next: E4 decision (§6.1), and F10 baselines.**
 
 ## 3. Environment
 
@@ -242,6 +256,20 @@ question rather than a formality.
 The audit also caught a degenerate target of my own: payload position at the anchor is identically
 zero once positions are anchor-relative. Removed, with tests preventing recurrence. Re-run the audit
 whenever the window config changes.
+
+### 5.10 The prober must be fed physical units, not normalised state
+Its nominal model integrates `ṗ = v`, `v̇ = a`, `ȧ = u`, which hold only in physical units:
+per-channel normalisation gives p/v/a different scales (std 1.11 / 1.53 / 2.00) and non-zero
+offsets. The rollout still ran while integrating the wrong quantities, and nothing in the loss curve
+showed it. Fixed via `GPUResidentSplit.denorm`; see `docs/F6-physics-prober.md` §3b.
+
+### 5.11 E5-a cannot literally pass, for a known reason
+With physical units restored and the residual disabled, the nominal integrator leaves RMSE
+0.26/0.39/0.45 over a 20-step rollout (data std ≈ 1.9). The raw CSVs are only *approximately*
+self-consistent — per-step Euler mismatch 0.006/0.012/0.021 — because upstream fits states and
+inputs with independent cubic splines on different knots (§5.6). Since the prober integrates
+exactly, that mismatch is upstream interpolation, not physics. **E5-b must control for it or it will
+just rediscover the spline inconsistency.**
 
 ### 5.9 Only forest types 0 and 2 exist
 `forest_params.py` defines `FOREST_SMALL_OBS id=0` and `FOREST_LARGE_OBS id=2`; `generate_forest.py`
