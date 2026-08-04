@@ -86,8 +86,8 @@ Machine: Ubuntu 22.04 host, 16 cores, 30 GB RAM, RTX 3090 (20 GB), ~500 GB free.
 Host has **no** numpy/torch in system python. Use the project venv:
 ```bash
 cd ~/Desktop/flatjepa
-./.venv/bin/python -m pytest tests/ -q                  # 189 pass, ~33 s
-./.venv/bin/python -m pytest tests/ -q -m "not slow"    # 188 pass, ~9 s
+./.venv/bin/python -m pytest tests/ -q                  # 230 pass, ~35 s
+./.venv/bin/python -m pytest tests/ -q -m "not slow"    # 229 pass, ~5 s
 ```
 `tests/conftest.py` pins torch to a single thread. Without it the suite takes **12+ minutes** during
 a generation run (torch's per-core threads fight the 14 pinned planner workers) and looks hung. Do
@@ -142,8 +142,10 @@ gitignored.
 
 Tunables (env vars): `FOREST_TYPES`, `SEEDS`, `N_PER_SEED`, `TARGET_CSVS`, `LIBHSL_DIR`.
 
-**Current corpus:** ~198+ forest trajectories, all forest-type 0, at
-`~/Desktop/polyfly_ral/data/csvs/forests/`. Plus 1 maze and 2 descent probes.
+**Current corpus:** ~1187 forest trajectories at `~/Desktop/polyfly_ral/data/csvs/forests/`,
+spanning forest types 0 and 2 (the only two that exist — see §5.9). Plus 1 maze and 2 descent
+probes, both excluded from the built dataset: the maze is 500 Hz and the probes are a different
+environment distribution.
 
 **⚠️ A previous run was lost to a reboot.** The machine rebooted at 2026-08-02 23:45, killing the
 job and wiping `/tmp`, where the original driver script and all logs lived. That is why the driver
@@ -371,7 +373,7 @@ Note the planner **rewrites these YAMLs in place** on solve, writing the global 
 
 ```bash
 cd ~/Desktop/flatjepa
-./.venv/bin/python -m pytest tests/ -q                                    # expect 189 passed, ~33 s
+./.venv/bin/python -m pytest tests/ -q                                    # expect 230 passed, ~35 s
 scripts/gen_launch.sh status                                              # generation state
 find ~/Desktop/polyfly_ral/data/csvs/forests -name '*.csv' | wc -l        # corpus size
 git log --oneline -5
