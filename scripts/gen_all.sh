@@ -14,7 +14,7 @@
 #
 # Environment:
 #   POLYFLY_REPO   path to the polyfly_ral checkout (default ~/Desktop/polyfly_ral)
-#   FOREST_TYPES   space-separated forest types      (default "0 1 2")
+#   FOREST_TYPES   space-separated forest types      (default "0 2" -- see note)
 #   SEEDS          space-separated base seeds        (default "101 202 303 404")
 #   N_PER_SEED     forests per invocation            (default 40)
 #   TARGET_CSVS    stop early once this many exist   (default 0 = no limit)
@@ -25,7 +25,11 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 POLYFLY_REPO="${POLYFLY_REPO:-$HOME/Desktop/polyfly_ral}"
 SHIM_DIR="$REPO_ROOT/scripts/shim"
 LOG_DIR="$REPO_ROOT/logs"
-FOREST_TYPES="${FOREST_TYPES:-0 1 2}"
+# Only 0 (small obstacles) and 2 (large obstacles) exist. forest_params.py defines
+# FOREST_SMALL_OBS id=0 and FOREST_LARGE_OBS id=2; generate_forest.py raises a bare
+# Exception for anything else, per trajectory, and still exits 0 -- so passing type 1
+# burns a whole phase reporting "0/360 succeeded" and looks like a real run.
+FOREST_TYPES="${FOREST_TYPES:-0 2}"
 SEEDS="${SEEDS:-101 202 303 404}"
 N_PER_SEED="${N_PER_SEED:-40}"
 TARGET_CSVS="${TARGET_CSVS:-0}"
@@ -60,6 +64,10 @@ else
 fi
 
 for FT in $FOREST_TYPES; do
+  if [ "$FT" != "0" ] && [ "$FT" != "2" ]; then
+    echo "WARNING: forest type $FT does not exist upstream (only 0 and 2). Skipping." >&2
+    continue
+  fi
   for SEED in $SEEDS; do
     if [ "$TARGET_CSVS" -gt 0 ] && [ "$(csv_count)" -ge "$TARGET_CSVS" ]; then
       echo "=== target $TARGET_CSVS reached, stopping ==="
