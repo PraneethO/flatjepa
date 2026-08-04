@@ -1,0 +1,52 @@
+{
+  "alpha": 0.001,
+  "dataset": "data/windows_v1",
+  "input_dim": 90,
+  "n_test": 4818,
+  "n_train": 27796,
+  "targets": {
+    "R_quad_cols": {
+      "disqualified": false,
+      "expected_kind": "nonlinear",
+      "r2_raw_window": 0.3995994215696543,
+      "width": 6
+    },
+    "a": {
+      "disqualified": true,
+      "expected_kind": "linear_trivial",
+      "r2_raw_window": 0.9999999999932875,
+      "width": 3
+    },
+    "cable_dir": {
+      "disqualified": false,
+      "expected_kind": "nonlinear",
+      "r2_raw_window": 0.6944658875358645,
+      "width": 3
+    },
+    "j": {
+      "disqualified": true,
+      "expected_kind": "linear_trivial",
+      "r2_raw_window": 0.9919238538010733,
+      "width": 3
+    },
+    "p_quad": {
+      "disqualified": false,
+      "expected_kind": "nonlinear",
+      "r2_raw_window": 0.6944658150333552,
+      "width": 3
+    },
+    "tension_margin": {
+      "disqualified": false,
+      "expected_kind": "nonlinear",
+      "r2_raw_window": 0.5035291014864531,
+      "width": 1
+    },
+    "v": {
+      "disqualified": true,
+      "expected_kind": "linear_trivial",
+      "r2_raw_window": 0.9999999986177519,
+      "width": 3
+    }
+  },
+  "threshold": 0.9
+}

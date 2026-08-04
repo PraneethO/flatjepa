@@ -1,18 +1,21 @@
-# Data and artifacts (top-level only — src/flatjepa/data/ is source, not data)
+# Data and training artifacts (top-level only — src/flatjepa/data/ is source, not data)
 /data/
 /runs/
 /checkpoints/
-/outputs/
 /wandb/
-*.npz
-*.zarr
 *.ckpt
 *.pt
 *.pth
+*.npz
+*.zarr
+
+# Results under /outputs are intentionally NOT ignored: probe tables and figures are the
+# reportable output of this project and should be versioned alongside the code that made them.
+# Large binaries are excluded by the patterns above.
 
 # Logs
+/logs/
 *.log
-logs/
 
 # Python
 __pycache__/
