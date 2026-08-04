@@ -116,6 +116,28 @@ class GPUResidentSplit:
     def flat_inputs(self) -> np.ndarray:
         return self._inner.flat_inputs()
 
+    # ------------------------------------------------------------------ physical units
+
+    def denorm(self, name: str, arr: torch.Tensor) -> torch.Tensor:
+        """Undo normalisation for ``name``, returning physical units.
+
+        The physics prober integrates ``ṗ = v``, ``v̇ = a``, ``ȧ = u``. Those identities hold only in
+        physical units: per-channel normalisation gives position, velocity and acceleration
+        different scales and non-zero offsets, under which the triple integrator is simply false.
+        Feeding normalised state to the nominal model is a silent error -- the rollout still runs,
+        it is just integrating the wrong quantities -- so stage 2 must denormalise first.
+        """
+        stats = self.normalization
+        if stats is None:
+            return arr
+        mean = torch.as_tensor(stats.mean[name], dtype=arr.dtype, device=arr.device)
+        std = torch.as_tensor(stats.std[name], dtype=arr.dtype, device=arr.device)
+        return arr * std + mean
+
+    @property
+    def normalization(self):
+        return self._inner.normalization
+
 
 def make_loader(
     dataset: TorchWindowDataset,

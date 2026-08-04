@@ -339,14 +339,18 @@ class Trainer:
                     _, pred_latents = self.model.rollout(
                         batch["state_hist"], batch["action_hist"], batch["action_future"]
                     )
-                init_state = batch["state_hist"][:, -1, :9]
+                # Physical units, not normalised: see GPUResidentSplit.denorm. The nominal
+                # triple integrator is only valid here.
+                init_state = self.train_ds.denorm(
+                    "state_hist", batch["state_hist"]
+                )[:, -1, :9]
+                jerk = self.train_ds.denorm("action_future", batch["action_future"])
+                target = self.train_ds.denorm("state_future", batch["state_future"])[..., :9]
+
                 out = self.prober(
-                    pred_latents.detach(),
-                    batch["action_future"],
-                    init_state=init_state,
-                    return_nominal=False,
+                    pred_latents.detach(), jerk, init_state=init_state, return_nominal=False
                 )
-                loss = PhysicsProber.rollout_loss(out["states"], batch["state_future"][..., :9])
+                loss = PhysicsProber.rollout_loss(out["states"], target)
                 opt.zero_grad(set_to_none=True)
                 loss.backward()
                 opt.step()

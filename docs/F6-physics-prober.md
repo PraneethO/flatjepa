@@ -69,6 +69,48 @@ fitting it to deliberately perturbed data. Otherwise "residual ≈ 0" is equally
 dead head that outputs zero regardless of input, which would pass the test for entirely the wrong
 reason.
 
+## 3b. E5-a run — what the residual actually has to learn *(measured)*
+
+Two bugs and one genuine finding came out of running this check.
+
+**Bug 1 — the prober was fed normalised state.** The nominal model integrates `ṗ = v`, `v̇ = a`,
+`ȧ = u`. Those identities hold only in **physical units**: per-channel normalisation gives position,
+velocity and acceleration different scales (std 1.11 / 1.53 / 2.00) and non-zero offsets, under
+which the triple integrator is simply false. The rollout still ran — it was just integrating the
+wrong quantities. Stage 2 now denormalises first (`GPUResidentSplit.denorm`). This is precisely the
+class of silent error E5-a exists to catch, and it was invisible in the loss curve.
+
+**Bug 2 — a stale-gradient false positive** in the freeze assertion; see F8.
+
+**Finding — the residual's true source is upstream interpolation, not physics.** With the residual
+disabled and physical units restored, the nominal integrator gives, over a 20-step rollout on real
+test windows:
+
+```
+RMSE pos 0.259   vel 0.393   acc 0.448      (data std ≈ 2.24 / 1.89 / 1.84)
+```
+
+Not zero. Checking the raw CSVs for internal self-consistency explains why:
+
+```
+p from v : 0.006     v from a : 0.012     a from u : 0.021     (mean abs mismatch per step, dt=0.1)
+```
+
+The prober uses **exact** zero-order-hold integration, for which `a_{k+1} = a_k + u_k·Δt` is exact
+when jerk is constant across the interval. A 0.021 residual on that row therefore means the recorded
+jerk is *not* the jerk that produced the recorded acceleration — which is F1 §5.6: upstream fits
+states and inputs with **independent** cubic splines on different knots. Compounded over 20 steps,
+0.021 per step is the ~0.4 RMSE observed.
+
+**Consequence for E5.** A literal "residual → 0" pass is not achievable on this corpus, and chasing
+it would be chasing an upstream interpolation artifact. The honest reframing:
+
+- the nominal model is **correct** — verified by the residual-free integrator test on synthetic
+  triple-integrator data, which is exact;
+- the residual on real data has a **known, quantified, non-physical source**;
+- E5-b's correlation analysis must therefore control for it, or it will report "the residual is
+  large where jerk is large" and simply be rediscovering the spline mismatch.
+
 ## 4. E5-b: residual as assumption monitor
 
 Given a calibrated instrument, correlate residual magnitude against:
