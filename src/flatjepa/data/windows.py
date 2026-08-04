@@ -18,12 +18,16 @@ Three properties of this corpus shape everything here:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Sequence
+from typing import TYPE_CHECKING, Sequence
 
 import numpy as np
 
-from flatjepa.data.csv_io import Trajectory
-from flatjepa.data.flatness import FlatOutputs
+if TYPE_CHECKING:  # pragma: no cover
+    from flatjepa.data.csv_io import Trajectory
+    from flatjepa.data.flatness import FlatOutputs
+
+# `csv_io` imports pandas, absent from the GPU training image. Windowing is pure NumPy and these
+# names are only needed for type checking.
 
 # Fields that may be used as model input. Order here defines channel order in the output.
 OBSERVABLE_FIELDS: tuple[str, ...] = ("payload_pos", "payload_vel", "payload_acc")
@@ -108,7 +112,7 @@ class Windows:
 
 
 def _stack_observed(
-    traj: Trajectory, fields: Sequence[str], idx: np.ndarray, origin: np.ndarray
+    traj: "Trajectory", fields: Sequence[str], idx: np.ndarray, origin: np.ndarray
 ) -> np.ndarray:
     """Gather ``fields`` at ``idx`` into (N, K, D), subtracting ``origin`` from position-like ones.
 
@@ -136,8 +140,8 @@ def window_indices(n_steps: int, config: WindowConfig) -> np.ndarray:
 
 
 def extract_windows(
-    traj: Trajectory,
-    flat: FlatOutputs | None = None,
+    traj: "Trajectory",
+    flat: "FlatOutputs | None" = None,
     config: WindowConfig | None = None,
 ) -> Windows:
     """Cut ``traj`` into windows.

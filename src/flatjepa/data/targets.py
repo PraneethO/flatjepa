@@ -20,10 +20,12 @@ audit says what is true, and a disagreement is itself a finding.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 import numpy as np
 
-from flatjepa.data.flatness import FlatOutputs
+if TYPE_CHECKING:  # pragma: no cover
+    from flatjepa.data.flatness import FlatOutputs
 
 LINEAR_TRIVIAL = "linear_trivial"
 NONLINEAR = "nonlinear"
@@ -85,7 +87,7 @@ def targets_of_kind(kind: str) -> tuple[str, ...]:
 
 
 def pack_targets(
-    flat: FlatOutputs, index: np.ndarray, origin: np.ndarray | None = None
+    flat: "FlatOutputs", index: np.ndarray, origin: np.ndarray | None = None
 ) -> np.ndarray:
     """Pack every probe target at ``index`` into one (N, TOTAL_TARGET_DIM) array.
 

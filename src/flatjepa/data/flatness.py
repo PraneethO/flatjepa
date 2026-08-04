@@ -23,13 +23,17 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import yaml
 from scipy.spatial.transform import Rotation
 
-from flatjepa.data.csv_io import Trajectory, load_trajectory_csv
+if TYPE_CHECKING:  # pragma: no cover
+    from flatjepa.data.csv_io import Trajectory
+
+# `csv_io` imports pandas, which the GPU training image does not have. The flat map itself is pure
+# NumPy/SciPy, so the CSV dependency is pulled in only by the two convenience wrappers below.
 from flatjepa.data.tension import cable_tension
 
 __all__ = [
@@ -351,7 +355,7 @@ def flat_outputs(
 
 
 def flat_outputs_from_trajectory(
-    traj: Trajectory,
+    traj: "Trajectory",
     params: SystemParams = SystemParams(),
     guards: GuardConfig = GuardConfig(),
 ) -> FlatOutputs:
@@ -372,6 +376,8 @@ def flat_outputs_from_csv(
     guards: GuardConfig = GuardConfig(),
 ) -> FlatOutputs:
     """Load a planner CSV and evaluate the flat map over it."""
+    from flatjepa.data.csv_io import load_trajectory_csv
+
     return flat_outputs_from_trajectory(load_trajectory_csv(path), params=params, guards=guards)
 
 

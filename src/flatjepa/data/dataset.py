@@ -20,15 +20,20 @@ from __future__ import annotations
 import json
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Iterable, Mapping, Sequence
+from typing import TYPE_CHECKING, Iterable, Mapping, Sequence
 
 import numpy as np
 
-from flatjepa.data.csv_io import load_trajectory_csv
-from flatjepa.data.flatness import SystemParams, flat_outputs_from_trajectory
-from flatjepa.data.manifest import TrajectoryRecord
-from flatjepa.data.targets import TARGET_NAMES, TOTAL_TARGET_DIM, pack_targets, target_slices
-from flatjepa.data.windows import WindowConfig, extract_windows
+from flatjepa.data.flatness import SystemParams
+from flatjepa.data.targets import TARGET_NAMES, TOTAL_TARGET_DIM, target_slices
+from flatjepa.data.windows import WindowConfig
+
+if TYPE_CHECKING:  # pragma: no cover
+    from flatjepa.data.manifest import TrajectoryRecord
+
+# `csv_io` pulls in pandas and `manifest` pulls in the CSV stack; both are needed only to *build* a
+# dataset, never to read one. Reading is what the training container does, and it has no pandas.
+# Keeping these imports inside the build path lets the training image stay minimal.
 
 SPLITS: tuple[str, ...] = ("train", "val", "test")
 
@@ -132,12 +137,14 @@ class BuildReport:
 
 
 def _trajectory_windows(
-    record: TrajectoryRecord,
+    record: "TrajectoryRecord",
     config: WindowConfig,
     params: SystemParams,
     report: BuildReport,
 ) -> dict[str, np.ndarray] | None:
     """Cut one trajectory, returning packed arrays or ``None`` if it yielded nothing usable."""
+    from flatjepa.data.csv_io import load_trajectory_csv
+
     try:
         traj = load_trajectory_csv(record.csv_path)
     except Exception as exc:  # noqa: BLE001 - we want the reason, not a crash mid-corpus
@@ -152,10 +159,12 @@ def _trajectory_windows(
     hz = int(round(1.0 / traj.dt)) if traj.dt == traj.dt and traj.dt > 0 else 0
     report.sample_rates[hz] = report.sample_rates.get(hz, 0) + 1
 
+    from flatjepa.data.flatness import flat_outputs_from_trajectory
+
     flat = flat_outputs_from_trajectory(traj, params=params)
 
     # How many windows would have existed without the validity filter, so the drop count is real.
-    from flatjepa.data.windows import window_indices
+    from flatjepa.data.windows import extract_windows, window_indices
 
     n_candidate = window_indices(traj.n_steps, config).size
     windows = extract_windows(traj, flat=flat, config=config)
@@ -164,6 +173,8 @@ def _trajectory_windows(
     if windows.n_windows == 0:
         report.skipped_all_invalid.append(record.stem)
         return None
+
+    from flatjepa.data.targets import pack_targets
 
     targets = pack_targets(flat, windows.anchor_index, origin=windows.anchor_origin)
 
@@ -177,7 +188,7 @@ def _trajectory_windows(
 
 
 def build_dataset(
-    records: Sequence[TrajectoryRecord],
+    records: Sequence["TrajectoryRecord"],
     out_dir: str | Path,
     config: WindowConfig | None = None,
     params: SystemParams | None = None,
